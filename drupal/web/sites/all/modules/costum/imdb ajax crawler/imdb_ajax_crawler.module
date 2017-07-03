@@ -1,0 +1,98 @@
+<?php
+
+/**
+ * Implements hook_menu()
+ *
+ */
+function imdb_ajax_crawler_menu() {
+    $items['imdb_ajax_crawler'] = array(
+      'title' => 'IMDB Crawler!!',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('imdb_ajax_crawler_form'),
+      'access callback' => TRUE,
+      'type' => MENU_NORMAL_ITEM,
+    );
+
+    return $items;
+}
+
+/**
+ * Page callback for slider2 path.
+ */
+function imdb_ajax_crawler_form($form, &$form_state) {
+
+    $form = array();
+
+
+    $form['movie'] = array(
+      '#title' => t('imdb movielink:'),
+      '#type' => 'textfield',
+      '#description' => 'Enter the imdb movielink here',
+      '#size' => 32,
+      '#maxlength' => 128,
+      '#required' => TRUE,
+    );
+
+    $form['button'] = array(
+      '#type' => 'submit',
+      '#button_type' => 'submit ajax-trigger',
+      '#value' => 'Click',
+      '#ajax' => array(
+        'submitter' => FALSE,
+        'callback' => 'ajax_callback',
+        'wrapper' => 'imdb-result',
+        'event' => 'click',
+      ),
+    );
+
+    $form['result'] = array(
+      '#markup' => '<div id="imdb-result"></div>',
+    );
+
+    return $form;
+}
+
+function imdb_ajax_crawler_form_validate($form, &$form_state) {
+    
+}
+
+function imdb_ajax_crawler_get_imdb_info($url) {
+    $homepage = file_get_contents($url);
+
+    //extracts title and strips away "-IMDB"
+    $string_pattern_title = "'<meta name=\"title\" content=\"(.*?)\" />'si";
+    preg_match($string_pattern_title, $homepage, $titleimdb);
+    $string_pattern_title2 = "'(.*?)- IMDb'si";
+    preg_match($string_pattern_title2, $titleimdb[1], $title);
+
+    //exracts the poster link and source
+    $string_pattern_poster_html = "'<div class=\"poster\">(.*?)</div>'si";
+    preg_match($string_pattern_poster_html, $homepage, $regextextposter);
+    $string_pattern_poster_link = "'href=\"(.*?)\"'si";
+    preg_match($string_pattern_poster_link, $regextextposter[0], $posterlink);
+    $string_pattern_poster_src = "'src=\"(.*?)\"'si";
+    preg_match($string_pattern_poster_src, $regextextposter[0], $postersrc);
+
+    //extracts summary text
+    $string_pattern_summary_text = "'<div class=\"summary_text\" itemprop=\"description\">(.*?)</div>'si";
+    preg_match($string_pattern_summary_text, $homepage, $summary_text);
+
+    $finished_markup = "<div id='ajaxid'>" . $title[1] . "</br><div class='poster'> <a href=\"http://www.imdb.com/" . $posterlink[1] . "\" > 
+	<img alt='movie poster'  src=" . $postersrc[1] . "/></a></div><p>" . $summary_text[1] . "</p></div>";
+
+    return $finished_markup;
+}
+
+function ajax_callback($form, &$form_state) {
+    $result = imdb_ajax_crawler_get_imdb_info($form_state['values']['movie']);
+
+    $form['result'] = array(
+      '#type' => 'markup',
+      '#markup' => '<div id="imdb-result">' . $result . '</div>',
+    );
+    return $form['result'];
+}
+
+function imdb_ajax_crawler_form_submit($form, &$form_state) {
+    
+}
