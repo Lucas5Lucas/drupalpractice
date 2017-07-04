@@ -1,0 +1,8 @@
+<?php
+
+name = IMDB Movie Info Crawler
+description = Crawls imdb movie pages for info
+package = tasks
+core = 7.x
+files[] = imdb_movie_info_crawler.module
+

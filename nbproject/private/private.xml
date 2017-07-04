@@ -1,4 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project-private xmlns="http://www.netbeans.org/ns/project-private/1">
     <editor-bookmarks xmlns="http://www.netbeans.org/ns/editor-bookmarks/2" lastBookmarkId="0"/>
+    <open-files xmlns="http://www.netbeans.org/ns/projectui-open-files/2">
+        <group>
+            <file>file:/Users/lucasgertsch/Sites/VM/config.yml</file>
+            <file>file:/Users/lucasgertsch/Sites/VM/Vagrantfile</file>
+            <file>file:/Users/lucasgertsch/Sites/VM/drupal/web/sites/all/modules/costum/New%20Movies%20List/new_movies_list.install</file>
+            <file>file:/Users/lucasgertsch/Sites/VM/drupal/web/sites/all/modules/costum/New%20Movies%20List/new_movies_list.module</file>
+            <file>file:/Users/lucasgertsch/Sites/VM/drupal/web/sites/all/modules/costum/imdb%20ajax%20crawler/imdb_ajax_crawler.info</file>
+            <file>file:/Users/lucasgertsch/Sites/VM/drupal/web/sites/all/modules/costum/imdb%20ajax%20crawler/imdb_ajax_crawler.module</file>
+            <file>file:/Users/lucasgertsch/Sites/VM/drupal/web/sites/all/modules/costum/New%20Movies%20List/new_movies_list.info</file>
+        </group>
+    </open-files>
 </project-private>
