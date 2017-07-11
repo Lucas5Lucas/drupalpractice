@@ -1,8 +1,0 @@
-<?php
-
-name = imdb ajax crawler
-description = crawls imdb pages info and displays things with ajax
-package = tasks
-core = 7.x
-files[] = imdb_ajax_crawler.module
-
