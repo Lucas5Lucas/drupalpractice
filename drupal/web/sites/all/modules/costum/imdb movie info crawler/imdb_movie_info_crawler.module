@@ -1,0 +1,136 @@
+<?php
+
+/**
+ * @file
+ * This module crawls Imdb movie pages and displays the movie title, picture and movie plot. 
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function imdb_movie_info_crawler_menu() {
+    $items['imdb_crawler'] = array(
+      'title' => 'Imdb crawler',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('imdb_movie_info_crawler_form'),
+      'access callback' => 'user_is_logged_in',
+      'type' => MENU_NORMAL_ITEM,
+    );
+    $items['movie_info'] = array(
+      'title' => 'Movie Info',
+      'page callback' => 'movie_info_page_callback',
+      'access callback' => 'user_is_logged_in',
+      'type' => MENU_LOCAL_TASK,
+    );
+    return $items;
+}
+
+/**
+ * Page callback for imdb_crawler path.
+ */
+function imdb_movie_info_crawler_form($form, &$form_state) {
+    $form['movie_url'] = array(
+      '#title' => t('Enter Imdb movie link'),
+      '#type' => 'textfield',
+      '#description' => t('Enter the imdb movie link here'),
+      '#size' => 32,
+      '#maxlength' => 128,
+      '#required' => TRUE,
+    );
+    $form['submit_button'] = array(
+      '#type' => 'submit',
+      '#value' => t('Submit!'),
+    );
+    return $form;
+}
+
+/**
+ * Form submission handler imdb_movie_info_crawler_form().
+ *
+ * @see imdb_movie_info_crawler_form_validate()
+ */
+function imdb_movie_info_crawler_form_validate($form, &$form_state) {
+    $submitted_url = $form_state['values']['movie_url'];
+    $string_pattern_url = "'^http://www.imdb.com/title/tt's";
+    $valid_url = preg_match($string_pattern_url, $submitted_url);
+    if (!$valid_url) {
+        form_set_error("movie_url", t("Please enter a valid url!"));
+    }
+}
+
+/**
+ * Form validation handler for user_login_form().
+ *
+ * @see imdb_movie_info_crawler_form_submit()
+ */
+function imdb_movie_info_crawler_form_submit($form, &$form_state) {
+    $movie_infos = imdb_movie_info_crwaler_fetch_infos($form_state['values']['movie_url']);
+    $_SESSION['movie_infos'] = $movie_infos;
+    drupal_goto("movie_info");
+}
+
+/**
+ * Page callback for movie_info path.
+ */
+function movie_info_page_callback() {
+    $movie_infos = array(
+      'title' => !empty($_SESSION['movie_infos']['title']) ? $_SESSION['movie_infos']['title'] : "",
+      'posterlink' => !empty($_SESSION['movie_infos']['posterlink']) ? $_SESSION['movie_infos']['posterlink'] : "",
+      'postersrc' => !empty($_SESSION['movie_infos']['postersrc']) ? $_SESSION['movie_infos']['postersrc'] : "",
+      'plot' => !empty($_SESSION['movie_infos']['plot']) ? $_SESSION['movie_infos']['plot'] : "",
+    );
+    $page['movie_info'] = [
+      '#theme' => 'show_movie_infos',
+      '#infos' => $movie_infos
+    ];
+    return $page;
+}
+
+/**
+ * Implements hook_theme(). 
+ */
+function imdb_movie_info_crawler_theme() {
+    return array(
+      'show_movie_infos' => array(
+        'variables' => array('infos' => []),
+        'template' => 'templates/movie_infos',
+    ));
+}
+
+/**
+ * Returns movie title, link to the posterlink, the source of the poster image and the movie plot.
+ *
+ * @params string $url
+ *   The movie url of an imdb movie page
+ */
+function imdb_movie_info_crwaler_fetch_infos($url) {
+    $homepage = file_get_contents($url);
+
+    // Extracts movie title from page.
+    $string_pattern_title = "'<meta name=\"title\" content=\"(.*?)\" />'si";
+    if (preg_match($string_pattern_title, $homepage, $titleimdb)) {
+        $string_pattern_title2 = "'(.*?)- IMDb'si";
+        preg_match($string_pattern_title2, $titleimdb[1], $title);
+    }
+
+
+    // Exracts the poster link and its image-source from page.
+    $string_pattern_poster_html = "'<div class=\"poster\">(.*?)</div>'si";
+    if (preg_match($string_pattern_poster_html, $homepage, $regextextposter)) {
+        $string_pattern_poster_link = "'href=\"(.*?)\"'si";
+        preg_match($string_pattern_poster_link, $regextextposter[0], $posterlink);
+        $string_pattern_poster_src = "'src=\"(.*?)\"'si";
+        preg_match($string_pattern_poster_src, $regextextposter[0], $postersrc);
+    }
+
+    // Extracts movie plot text.
+    $string_pattern_summary_text = "'<div class=\"summary_text\" itemprop=\"description\">(.*?)</div>'si";
+    preg_match($string_pattern_summary_text, $homepage, $summary_text);
+    $movie_infos = array(
+      "title" => isset($title[1]) ? $title[1] : "",
+      "posterlink" => isset($posterlink[1]) ? "http://www.imdb.com/" . $posterlink[1] : "",
+      "postersrc" => isset($postersrc[1]) ? $postersrc[1] : "",
+      "plot" => isset($summary_text[1]) ? $summary_text[1] : "",
+    );
+    return $movie_infos;
+}
