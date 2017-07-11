@@ -22,6 +22,13 @@ function imdb_movie_info_crawler_menu() {
       'access callback' => 'user_is_logged_in',
       'type' => MENU_LOCAL_TASK,
     );
+    $items['imdb_crawler_ajax'] = array(
+      'title' => 'Imdb crawler',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('imdb_movie_info_crawler_form'),
+      'access callback' => 'user_is_logged_in',
+      'type' => MENU_NORMAL_ITEM,
+    );
     return $items;
 }
 
