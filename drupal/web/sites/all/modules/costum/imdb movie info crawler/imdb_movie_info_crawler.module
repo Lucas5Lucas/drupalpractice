@@ -54,7 +54,7 @@ function imdb_movie_info_crawler_form_validate($form, &$form_state) {
     $string_pattern_url = "'^http://www.imdb.com/title/tt's";
     $valid_url = preg_match($string_pattern_url, $submitted_url);
     if (!$valid_url) {
-        form_set_error("movie_url", "Please enter a valid url!");
+        form_set_error("movie_url", t("Please enter a valid url!"));
     }
 }
 
