@@ -216,7 +216,7 @@ function ajax_callback($form, &$form_state) {
     );
     $form['result']['title'] = array(
       '#type' => 'markup',
-      '#markup' => "Title: " . $title . "</br>",
+      '#markup' => t("Title: ") . $title . "</br>",
     );
     if (!empty($posterlink) && !empty($postersrc)) {
         $form['result']['image'] = array(
@@ -228,7 +228,7 @@ function ajax_callback($form, &$form_state) {
     }
     $form['result']['plot'] = array(
       '#type' => 'markup',
-      '#markup' => "Plot: " . $plot,
+      '#markup' => t("Plot: ") . $plot,
     );
     return $form['result'];
 }
