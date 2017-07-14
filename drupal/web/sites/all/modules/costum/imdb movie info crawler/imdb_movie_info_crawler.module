@@ -22,6 +22,13 @@ function imdb_movie_info_crawler_menu() {
       'access callback' => 'user_is_logged_in',
       'type' => MENU_LOCAL_TASK,
     );
+    $items['imdb_crawler_ajax'] = array(
+      'title' => 'Imdb crawler ajax',
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('imdb_movie_info_ajax_crawler_form'),
+      'access callback' => 'user_is_logged_in',
+      'type' => MENU_NORMAL_ITEM,
+    );
     return $items;
 }
 
@@ -45,7 +52,7 @@ function imdb_movie_info_crawler_form($form, &$form_state) {
 }
 
 /**
- * Form submission handler imdb_movie_info_crawler_form().
+ * Form submission handler for imdb_movie_info_crawler_form().
  *
  * @see imdb_movie_info_crawler_form_validate()
  */
@@ -59,12 +66,12 @@ function imdb_movie_info_crawler_form_validate($form, &$form_state) {
 }
 
 /**
- * Form validation handler for user_login_form().
+ * Form validation handler for imdb_movie_info_crawler_form().
  *
  * @see imdb_movie_info_crawler_form_submit()
  */
 function imdb_movie_info_crawler_form_submit($form, &$form_state) {
-    $movie_infos = imdb_movie_info_crwaler_fetch_infos($form_state['values']['movie_url']);
+    $movie_infos = imdb_movie_info_crawler_fetch_infos($form_state['values']['movie_url']);
     $_SESSION['movie_infos'] = $movie_infos;
     drupal_goto("movie_info");
 }
@@ -103,7 +110,7 @@ function imdb_movie_info_crawler_theme() {
  * @params string $url
  *   The movie url of an imdb movie page
  */
-function imdb_movie_info_crwaler_fetch_infos($url) {
+function imdb_movie_info_crawler_fetch_infos($url) {
     $homepage = file_get_contents($url);
 
     // Extracts movie title from page.
@@ -133,4 +140,95 @@ function imdb_movie_info_crwaler_fetch_infos($url) {
       "plot" => isset($summary_text[1]) ? $summary_text[1] : "",
     );
     return $movie_infos;
+}
+
+/**
+ * Page callback for imdb_crawler_ajax path.
+ */
+function imdb_movie_info_ajax_crawler_form($form, &$form_state) {
+    $form = array();
+    $form['movie_url'] = array(
+      '#title' => t('Imdb movielink:'),
+      '#type' => 'textfield',
+      '#description' => t('Enter the imdb movielink here'),
+      '#size' => 32,
+      '#maxlength' => 128,
+      '#required' => TRUE,
+    );
+    $form['button'] = array(
+      '#type' => 'submit',
+      '#button_type' => 'submit ajax-trigger',
+      '#value' => t('Click'),
+      '#ajax' => array(
+        'submitter' => FALSE,
+        'callback' => 'ajax_callback',
+        'wrapper' => 'imdb-result',
+        'event' => 'click',
+      ),
+    );
+    $form['result'] = array(
+      '#markup' => '<div id="imdb-result"></div>',
+    );
+    return $form;
+}
+
+/**
+ * Form validation handler for imdb_movie_info_ajax_crawler_form().
+ *
+ * @see imdb_movie_info_ajax_crawler_form_submit()
+ */
+function imdb_movie_info_ajax_crawler_form_validate($form, &$form_state) {
+    $submitted_url = $form_state['values']['movie_url'];
+    $string_pattern_url = "'^http://www.imdb.com/title/tt's";
+    $valid_url = preg_match($string_pattern_url, $submitted_url);
+    if (!$valid_url) {
+        form_set_error("movie_url", t("Please enter a valid url!"));
+    }
+}
+
+/**
+ * Form submission handler for imdb_movie_info_ajax_crawler_form().
+ *
+ * @see imdb_movie_info_ajax_crawler_form_validate()
+ */
+function imdb_movie_info_ajax_crawler_form_submit($form, &$form_state) {
+    
+}
+
+/**
+ * Alters the imdb_movie_info_ajax_crawler_form to displays movie infos.
+ * 
+ * @return $form['result']
+ *  Returns markup that displays movie infos.
+ */
+function ajax_callback($form, &$form_state) {
+    $result = !empty(imdb_movie_info_crawler_fetch_infos($form_state['values']['movie_url'])) ? imdb_movie_info_crawler_fetch_infos($form_state['values']['movie_url']) : "";
+    $plot = !empty($result['plot']) ? $result['plot'] : "No Plot available";
+    $title = !empty($result['title']) ? $result['title'] : "No Title available";
+    $postersrc = !empty($result['postersrc']) ? $result['postersrc'] : "";
+    $posterlink = !empty($result['posterlink']) ? $result['posterlink'] : "";
+
+    $form['result'] = array(
+      '#type' => 'container',
+      '#attributes' => array(
+        'id' => 'imdb-result',
+      )
+    );
+    $form['result']['title'] = array(
+      '#type' => 'markup',
+      '#markup' => t("Title: ") . $title . "</br>",
+    );
+    if (!empty($posterlink) && !empty($postersrc)) {
+        $form['result']['image'] = array(
+          '#type' => 'markup',
+          '#markup' => '<img src="' . $postersrc . '"/></br>',
+          '#prefix' => '<a href="' . $posterlink . '">',
+          '#suffix' => '</a>',
+        );
+    }
+    $form['result']['plot'] = array(
+      '#type' => 'markup',
+      '#markup' => t("Plot: ") . $plot,
+    );
+    return $form['result'];
 }
