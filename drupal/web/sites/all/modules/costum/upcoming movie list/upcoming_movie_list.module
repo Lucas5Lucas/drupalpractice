@@ -1,0 +1,88 @@
+<?php
+
+/**
+ * @file
+ * This module crawls imdb.com and displays the upcoming movies in a list. 
+ * The list is updated with every cron run. 
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function upcoming_movie_list_menu() {
+    $items['new_movies'] = array(
+      'title' => t('Upcoming movie list'),
+      'page callback' => 'upcoming_movie_list_page_callpack',
+      'access callback' => 'user_is_logged_in',
+      'type' => MENU_NORMAL_ITEM,
+    );
+    return $items;
+}
+
+/**
+ * Page callback for imdb_crawler path.
+ */
+function upcoming_movie_list_page_callpack() {
+    $query = new EntityFieldQuery();
+    $query
+        ->entityCondition('entity_type', 'node')
+        ->propertyCondition('type', 'upcoming_movie')
+        ->propertyOrderBy('created', 'DESC');
+    $result = $query->execute();
+    $node = node_load_multiple(array_keys($result['node']));
+    return node_view_multiple($node, 'teaser');
+}
+
+/**
+ * Implements hook_cron().
+ * 
+ * Deletes all old nodes of type "upcoming_movie" and updates to the new movies 
+ */
+function upcoming_movie_list_cron() {
+    if ($upcoming_movies = fetch_upcoming_movie_titles()) {
+        $result = db_query("SELECT nid FROM {node} AS n WHERE n.type = 'upcoming_movie'");
+        foreach ($result as $record) {
+            node_delete($record->nid);
+        }
+        global $user;
+        foreach ($upcoming_movies as $title) {
+            $node = new stdClass();
+            $node->title = $title;
+            $node->type = "upcoming_movie";
+            node_object_prepare($node);
+            $node->language = LANGUAGE_NONE;
+            $node->uid = $user->uid;
+            $node->status = 1; //(1 or 0): published or not
+            $node->promote = 1; //(1 or 0): promoted to front page
+            $node->comment = 0; // 0 = comments disabled, 1 = read only, 2 = read/write
+
+            $node = node_submit($node);
+            node_save($node);
+        }
+        watchdog('upcoming_movie_list', t("New movies added to database"));
+    } else {
+        watchdog('upcoming_movie_list', t("Loading new movies failed"));
+    }
+}
+
+/**
+ * Returns an array with all the upcoming movie titles.
+ *
+ * @params string 
+ *   An array with all the upcoming movie titles
+ */
+function fetch_upcoming_movie_titles() {
+    $url_new_movies_list = "http://www.imdb.com/movies-in-theaters/?pf_rd_m=A2FGELUUNOQJNL&pf_rd_p=2750721702&pf_rd_r=11DRXYJX1PECE8HDED97&pf_rd_s=right-2&pf_rd_t=15061&pf_rd_i=homepage&ref_=hm_otw_sm";
+    $homepage = file_get_contents($url_new_movies_list);
+    $string_pattern = "'list detail sub-list(.*?)list detail sub-list'si";
+    preg_match($string_pattern, $homepage, $match);
+    preg_match_all('/title=\"(.*?)\" itemprop/', $match[1], $extracted_titles);
+
+    $upcoming_movie_titles = array();
+    $counter = 0;
+    foreach ($extracted_titles[1] as $title) {
+        $upcoming_movie_titles[$counter] = $title;
+        $counter++;
+    }
+    return $upcoming_movie_titles;
+}
