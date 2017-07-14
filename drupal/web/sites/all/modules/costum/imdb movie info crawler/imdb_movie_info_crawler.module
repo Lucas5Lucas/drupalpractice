@@ -185,13 +185,14 @@ function imdb_movie_info_ajax_crawler_form_validate($form, &$form_state) {
         form_set_error("movie_url", t("Please enter a valid url!"));
     }
 }
+
 /**
  * Form submission handler for imdb_movie_info_ajax_crawler_form().
  *
  * @see imdb_movie_info_ajax_crawler_form_validate()
  */
 function imdb_movie_info_ajax_crawler_form_submit($form, &$form_state) {
-
+    
 }
 
 /**
@@ -201,47 +202,33 @@ function imdb_movie_info_ajax_crawler_form_submit($form, &$form_state) {
  *  Returns markup that displays movie infos.
  */
 function ajax_callback($form, &$form_state) {
-    $result = !empty(imdb_crawler_ajax_return_imdb_info_markup($form_state['values']['movie_url'])) ? imdb_crawler_ajax_return_imdb_info_markup($form_state['values']['movie_url']) : "";
+    $result = !empty(imdb_movie_info_crawler_fetch_infos($form_state['values']['movie_url'])) ? imdb_movie_info_crawler_fetch_infos($form_state['values']['movie_url']) : "";
+    $plot = !empty($result['plot']) ? $result['plot'] : "No Plot available";
+    $title = !empty($result['title']) ? $result['title'] : "No Title available";
+    $postersrc = !empty($result['postersrc']) ? $result['postersrc'] : "";
+    $posterlink = !empty($result['posterlink']) ? $result['posterlink'] : "";
+
     $form['result'] = array(
+      '#type' => 'container',
+      '#attributes' => array(
+        'id' => 'imdb-result',
+      )
+    );
+    $form['result']['title'] = array(
       '#type' => 'markup',
-      '#markup' => '<div id="imdb-result">' . $result . '</div>',
+      '#markup' => "Title: " . $title . "</br>",
+    );
+    if (!empty($posterlink) && !empty($postersrc)) {
+        $form['result']['image'] = array(
+          '#type' => 'markup',
+          '#markup' => '<img src="' . $postersrc . '"/></br>',
+          '#prefix' => '<a href="' . $posterlink . '">',
+          '#suffix' => '</a>',
+        );
+    }
+    $form['result']['plot'] = array(
+      '#type' => 'markup',
+      '#markup' => "Plot: " . $plot,
     );
     return $form['result'];
-}
-
-/**
- * Returns the markup of movie infos.
- * 
- * @param type $url
- *  The movie url of an imdb movie link
- * @return string $finished_markup
- *  The printable markup of movie infos
- */
-function imdb_crawler_ajax_return_imdb_info_markup($url) {
-	$homepage = file_get_contents($url);
-
-	// Extracts title and strips away "-IMDB".
-	$string_pattern_title = "'<meta name=\"title\" content=\"(.*?)\" />'si";
-	preg_match($string_pattern_title, $homepage, $titleimdb);
-	$string_pattern_title2 = "'(.*?)- IMDb'si";
-	preg_match($string_pattern_title2, $titleimdb[1], $title);
-
-	// Exracts the poster link and source.
-	$string_pattern_poster_html = "'<div class=\"poster\">(.*?)</div>'si";
-	preg_match($string_pattern_poster_html, $homepage, $regextextposter);
-	$string_pattern_poster_link = "'href=\"(.*?)\"'si";
-	preg_match($string_pattern_poster_link, $regextextposter[0], $posterlink);
-	$string_pattern_poster_src = "'src=\"(.*?)\"'si";
-	preg_match($string_pattern_poster_src, $regextextposter[0], $postersrc);
-
-	// Extracts summary text.
-	$string_pattern_summary_text = "'<div class=\"summary_text\" itemprop=\"description\">(.*?)</div>'si";
-	preg_match($string_pattern_summary_text, $homepage, $summary_text);
-	
-        $finished_markup = !empty($title[1]) ? "<div id='ajaxid'>".$title[1]."</br>" : "";
-        $finished_markup .= !empty($finished_markup) && !empty($posterlink[1]) && !empty($postersrc[1]) ? 
-            "<div class='poster'> <a href=\"http://www.imdb.com/".$posterlink[1]."\" ><img alt='movie poster'  src=".$postersrc[1]."/></a></div>" : "";
-        $finished_markup .= !empty($finished_markup) && !empty($summary_text[1]) ? "<p>".$summary_text[1]."</p>" : "";
-        $finished_markup .= !empty($finished_markup) ? "</div>" : "";         
-	return $finished_markup;
 }
