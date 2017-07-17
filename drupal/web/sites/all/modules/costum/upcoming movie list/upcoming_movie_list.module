@@ -16,11 +16,17 @@ function upcoming_movie_list_menu() {
       'access callback' => 'user_is_logged_in',
       'type' => MENU_NORMAL_ITEM,
     );
+    $items['new_movies_just_titles'] = array(
+      'title' => t('Upcoming movie list only titles'),
+      'page callback' => 'upcoming_movie_list_just_titles_page_callpack',
+      'access callback' => 'user_is_logged_in',
+      'type' => MENU_NORMAL_ITEM,
+    );
     return $items;
 }
 
 /**
- * Page callback for imdb_crawler path.
+ * Page callback for upcoming_movie_list_menu.
  */
 function upcoming_movie_list_page_callpack() {
     $query = new EntityFieldQuery();
@@ -36,7 +42,9 @@ function upcoming_movie_list_page_callpack() {
 /**
  * Implements hook_cron().
  * 
- * Deletes all old nodes of type "upcoming_movie" and updates to the new movies 
+ * Deletes all old nodes of type "upcoming_movie" and updates to the new movies.
+ * Deletes all old nodes of type "last_time_updated_upcoming_movie" 
+ * and updates to current timestamp.
  */
 function upcoming_movie_list_cron() {
     if ($upcoming_movies = fetch_upcoming_movie_titles()) {
@@ -59,6 +67,30 @@ function upcoming_movie_list_cron() {
             $node = node_submit($node);
             node_save($node);
         }
+
+        if ($result = db_query("SELECT nid FROM {node} AS n WHERE n.type = 'last_time_updated_upcoming_movie'")) {
+            foreach ($result as $time_node) {
+                node_delete($time_node->nid);
+            }
+        }
+        $node = new stdClass();
+        $date = new DateTime();
+        $timestamp = $date->getTimestamp();
+        $save_date = format_date($timestamp, $type = 'medium', $format = '', 'Europe/Berlin');
+        $node->title = $save_date . " Berlin time";
+        $node->type = "last_time_updated_upcoming_movie";
+        node_object_prepare($node);
+        $node->language = LANGUAGE_NONE;
+        $node->uid = $user->uid;
+        $node->status = 1; //(1 or 0): published or not
+        $node->promote = 1; //(1 or 0): promoted to front page
+        $node->comment = 0; // 0 = comments disabled, 1 = read only, 2 = read/write
+
+        $node = node_submit($node);
+        node_save($node);
+
+
+
         watchdog('upcoming_movie_list', t("New movies added to database"));
     } else {
         watchdog('upcoming_movie_list', t("Loading new movies failed"));
@@ -69,7 +101,7 @@ function upcoming_movie_list_cron() {
  * Returns an array with all the upcoming movie titles.
  *
  * @params string 
- *   An array with all the upcoming movie titles
+ *   An array with all the upcoming movie titles.
  */
 function fetch_upcoming_movie_titles() {
     $url_new_movies_list = "http://www.imdb.com/movies-in-theaters/?pf_rd_m=A2FGELUUNOQJNL&pf_rd_p=2750721702&pf_rd_r=11DRXYJX1PECE8HDED97&pf_rd_s=right-2&pf_rd_t=15061&pf_rd_i=homepage&ref_=hm_otw_sm";
@@ -85,4 +117,52 @@ function fetch_upcoming_movie_titles() {
         $counter++;
     }
     return $upcoming_movie_titles;
+}
+
+/**
+ * Page callback for upcoming_movie_list_menu path.
+ */
+function upcoming_movie_list_just_titles_page_callpack() {
+    $node_query = new EntityFieldQuery();
+    $node_query
+        ->entityCondition('entity_type', 'node')
+        ->propertyCondition('type', 'upcoming_movie')
+        ->propertyOrderBy('created', 'DESC');
+    $result = $node_query->execute();
+    $nodes = node_load_multiple(array_keys($result['node']));
+    //return node_view_multiple($node, 'teaser');
+
+    $movietitles = [];
+    foreach ($nodes as $node) {
+        $movietitles [] = $node->title;
+    }
+
+    $timestamp_query = new EntityFieldQuery();
+    $timestamp_query
+        ->entityCondition('entity_type', 'node')
+        ->propertyCondition('type', 'last_time_updated_upcoming_movie')
+        ->range(0, 1);
+    $timestamp_query_result = $timestamp_query->execute();
+    $nid = array_keys($timestamp_query_result['node']);
+    $time_of_update_nodes = node_load($nid[0]);
+    $time_of_update_markup = $time_of_update_nodes->title;
+
+    $page['upcoming_movie_list_only_titles'] = [
+      '#theme' => 'movie_titles',
+      '#movietitles' => $movietitles,
+      '#time_of_update_markup' => $time_of_update_markup
+    ];
+    return $page;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function upcoming_movie_list_theme() {
+    return array(
+      'movie_titles' => array(
+        'variables' => array('movietitles' => [], 'time_of_update_markup' => NULL),
+        'template' => 'templates/upcoming_movie_list_only_titles',
+      )
+    );
 }
