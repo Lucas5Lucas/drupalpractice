@@ -1,8 +1,8 @@
 <ol>
     <?php
     foreach ($movietitles as $title) {
-        print "<h2><li>" . $title . "</li></h2>";
+        print "<li><h2>" . $title . "</h2></li>";
     }
     ?>   
 </ol>
-<h3><?php print "Last updated: ".$time_of_update_markup;?></li></h3>
+<h3><?php print "Last updated: ".$time_of_update_markup;?></h3>
