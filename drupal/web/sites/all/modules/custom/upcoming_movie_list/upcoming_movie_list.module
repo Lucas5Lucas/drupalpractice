@@ -1,0 +1,200 @@
+<?php
+
+/**
+ * @file
+ * This module crawls imdb.com and displays the upcoming movies in a list. 
+ * The list is updated with every cron run. 
+ */
+
+module_load_include('inc', 'upcoming_movie_list', 'upcoming_movie_list_helpers');
+    
+/**
+ * Implements hook_menu().
+ */
+function upcoming_movie_list_menu() {
+    $items['new_movies'] = array(
+      'title' => t('Upcoming movie list'),
+      'page callback' => 'upcoming_movie_list_page_callpack',
+      'access callback' => 'user_is_logged_in',
+      'type' => MENU_NORMAL_ITEM,
+    );
+    $items['new_movies_just_titles'] = array(
+      'title' => t('Upcoming movie list only titles'),
+      'page callback' => 'upcoming_movie_list_just_titles_page_callpack',
+      'access callback' => 'user_is_logged_in',
+      'type' => MENU_NORMAL_ITEM,
+    );
+    $items['new_movies_ajax_list'] = array(
+      'title' => t('Upcoming movie list with ajax'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('new_movies_ajax_list_form'),
+      'access callback' => 'user_is_logged_in',
+      'type' => MENU_NORMAL_ITEM,
+    );
+    return $items;
+}
+
+/**
+ * Page callback for upcoming_movie_list_menu.
+ */
+function upcoming_movie_list_page_callpack() {
+    $query = new EntityFieldQuery();
+    $query
+        ->entityCondition('entity_type', 'node')
+        ->propertyCondition('type', 'upcoming_movie');
+    $result = $query->execute();
+    $node = node_load_multiple(array_keys($result['node']));
+    return node_view_multiple($node, 'teaser');
+}
+
+/**
+ * Implements hook_cron().
+ * 
+ * Updates last_time_updated node.
+ * If movies for current release date haven't been crawled, they are saved.
+ * Saves the current release date as a node if it hasen't been crawled yet
+ */
+function upcoming_movie_list_cron() {
+
+    if ($release_date_markup = fetch_upcoming_movies_release_date()) {
+
+        // Check if the crawler release date is already stored.
+        if (is_release_date_saved($release_date_markup) == FALSE) {
+            save_release_date($release_date_markup);
+            save_upcoming_movie_nodes();
+            update_last_time_updated_node();
+            watchdog('upcoming_movie_list', "New movies added to database");
+        } else {
+            update_last_time_updated_node();
+            watchdog('upcoming_movie_list', "No new movies added, release date has already been checkt!");
+        }
+    }
+}
+
+/**
+ * Page callback for upcoming_movie_list_menu path.
+ */
+function upcoming_movie_list_just_titles_page_callpack() {
+    $fetched_release_date = fetch_upcoming_movies_release_date();
+    // Fetch titles from all "upcoming_movie" nodes
+    $node_query = new EntityFieldQuery();
+    $node_query
+        ->entityCondition('entity_type', 'node')
+        ->propertyCondition('type', 'upcoming_movie')
+        ->fieldCondition('field_release_date ', 'value', $fetched_release_date);
+    $result = $node_query->execute();
+    $nodes = node_load_multiple(array_keys($result['node']));
+    $movietitles = [];
+    foreach ($nodes as $node) {
+        $movietitles [] = $node->title;
+        $release_date = $node->field_release_date['und'][0]['value'];
+    }
+
+    $page['upcoming_movie_list_only_titles'] = [
+      '#theme' => 'movie_titles',
+      '#movietitles' => $movietitles,
+      '#time_of_update_markup' => variable_get('last_checked_upcoming_movies'),
+      '#release_date' => $release_date,
+    ];
+    return $page;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function upcoming_movie_list_theme() {
+    return array(
+      'movie_titles' => array(
+        'variables' => array('movietitles' => [], 'time_of_update_markup' => NULL, 'release_date' => NULL),
+        'template' => 'templates/upcoming_movie_list_only_titles',
+      )
+    );
+}
+
+/**
+ * Creates form for new_movies_ajax_list path.
+ */
+function new_movies_ajax_list_form($form, &$form_state) {
+
+    // Fetch titles from all "upcoming_movie" nodes
+    $node_query = new EntityFieldQuery();
+    $node_query
+        ->entityCondition('entity_type', 'node')
+        ->propertyCondition('type', 'upcoming_movie_release_date');
+    $result = $node_query->execute();
+    $nodes = node_load_multiple(array_keys($result['node']));
+    $dates = [];
+    foreach ($nodes as $node) {
+        $dates[$node->title] = $node->title;
+    }
+    $selected = isset($form_state['values']['release_date_options']) ? $form_state['values']['release_date_options'] : key($dates);
+    $form['release_date_options'] = array(
+      '#title' => t('Release Date'),
+      '#type' => 'select',
+      '#description' => t('Select the Release Date.'),
+      '#options' => $dates,
+      '#default_value' => $selected
+    );
+    $form['submit'] = array(
+      '#type' => 'submit',
+      '#value' => t('Submit'),
+      '#ajax' => array(
+        'callback' => 'new_movies_ajax_list_ajax_callback',
+        'wrapper' => 'list-of-movies',
+      ),
+    );
+    $form['result'] = array(
+      '#markup' => '<div id="list-of-movies"></div>',
+    );
+    return $form;
+}
+
+/**
+ * Ajax callback for new_movies_ajax_list_ajax.
+ * Recreates form with search results for submitted release date.
+ * @param type $form
+ *  The new_movies_ajax_list_ajax form
+ * @param type $form_state
+ *  The submitted value
+ * @return string
+ *  New formelement with results.
+ */
+function new_movies_ajax_list_ajax_callback($form, &$form_state) {
+    $submitted_release_date = $form_state['values'];
+
+    // Fetch titles from all with mtaching release date nodes.
+    $node_query = new EntityFieldQuery();
+    $node_query
+        ->entityCondition('entity_type', 'node')
+        ->propertyCondition('type', 'upcoming_movie')
+        ->fieldCondition('field_release_date ', 'value', $submitted_release_date);
+    $result = $node_query->execute();
+    $nodes = node_load_multiple(array_keys($result['node']));
+    $titles = [];
+    
+    foreach ($nodes as $node) {
+        $titles[] = $node->title;
+    }
+    $result = $form_state['values']['release_date_options'];
+    $form['result'] = array(
+      '#type' => 'wrapper',
+      '#markup' => '<div id="list-of-movies">',
+      '#prefix' => '<div id="list-of-movies">',
+      '#suffix' => '</div>'
+    );
+    foreach ($titles as $title) {
+        $form['result'][$title] = array(
+          '#type' => 'markup',
+          '#markup' => $title . "</br>",
+        );
+    }
+    return $form['result'];
+}
+
+function new_movies_ajax_list_form_submit($form, &$form_state) {
+	
+}
+
+function new_movies_ajax_list_form_validate($form, &$form_state) {
+	
+}

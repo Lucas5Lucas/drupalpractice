@@ -1,8 +1,0 @@
-<?php
-
-name = Upcoming Movie List
-description = Shows upcoming movies from imdb in a list
-package = tasks
-core = 7.x
-files[] = upcoming_movie_list.module
-
