@@ -25,6 +25,13 @@ function upcoming_movie_list_menu() {
       'access callback' => 'user_is_logged_in',
       'type' => MENU_NORMAL_ITEM,
     );
+    $items['search_movies_ajax'] = array(
+      'title' => t('Search movies'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('search_movies_ajax_form'),
+      'access callback' => 'user_is_logged_in',
+      'type' => MENU_NORMAL_ITEM,
+    );
     return $items;
 }
 
@@ -167,11 +174,94 @@ function new_movies_ajax_list_ajax_callback($form, &$form_state) {
     }
     return $form['result'];
 }
-
+/**
+ * Implements hook_form_submit
+ */
 function new_movies_ajax_list_form_submit($form, &$form_state) {
 	
 }
 
+/**
+ * Implements hook_form_validate
+ */
 function new_movies_ajax_list_form_validate($form, &$form_state) {
 	
+}
+
+
+/**
+ * Creates form for search_movies_ajax path.
+ */
+function search_movies_ajax_form($form, &$form_state) {
+    $selected = isset($form_state['values']['release_date_options']) ? $form_state['values']['release_date_options'] : "nothing selected";
+    
+    $form['search'] = array(
+      '#title' => t('Search movie:'),
+      '#type' => 'textfield',
+      '#size' => 60,
+      '#maxlength' => 128,
+      '#required' => TRUE,
+    );
+    $form['submit'] = array(
+      '#type' => 'submit',
+      '#value' => t('Submit'),
+      '#ajax' => array(
+        'callback' => 'search_movies_ajax_callback',
+        'wrapper' => 'search-result',
+      ),
+    );
+    $form['result'] = array(
+      '#markup' => '<div id="search-result"></div>',
+    );
+    return $form;
+}
+
+/**
+ * Ajax callback for search_movies_ajax.
+ * Recreates form with search results for submitted string.
+ * @param type $form
+ *  The new_movies_ajax_list_ajax form
+ * @param type $form_state
+ *  The submitted value
+ * @return string
+ *  New formelement with results.
+ */
+function search_movies_ajax_callback($form, &$form_state) {
+    $submitted_string = $form_state['values']['search'];
+    $name_query = db_select('node', 'n');
+    $name_query->fields('n')
+            ->condition('title', '%' . db_like($submitted_string) . '%', 'LIKE');
+    $name_result = $name_query->execute();
+
+    while($fetched_title = $name_result->fetchAssoc()) {
+        $titles[] = $fetched_title;
+    }
+
+    $form['result'] = array(
+      '#type' => 'wrapper',
+      '#markup' => '',
+      '#prefix' => '<div id="search-result">',
+      '#suffix' => '</div>'
+    );
+    foreach ($titles as $title) {
+        $form['result'][$title['title']] = array(
+        '#type' => 'markup',
+        '#markup' => $title['title'].'</br>', 
+        );
+    }
+    return $form['result'];
+}
+
+/**
+ * Implements hook_form_submit
+ */
+function search_movies_ajax_form_submit($form, &$form_state) {
+    
+}
+
+/**
+ * Implements hook_form_validate
+ */
+function search_movies_ajax_form_validate($form, &$form_state) {
+    
 }
