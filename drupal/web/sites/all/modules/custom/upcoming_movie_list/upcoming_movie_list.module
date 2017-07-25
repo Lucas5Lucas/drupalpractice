@@ -1,0 +1,267 @@
+<?php
+
+/**
+ * @file
+ * This module crawls imdb.com and displays the upcoming movies in a list. 
+ * The list is updated with every cron run. 
+ */
+
+module_load_include('inc', 'upcoming_movie_list', 'upcoming_movie_list_helpers');
+    
+/**
+ * Implements hook_menu().
+ */
+function upcoming_movie_list_menu() {
+    $items['new_movies_just_titles'] = array(
+      'title' => t('Upcoming movie list only titles'),
+      'page callback' => 'upcoming_movie_list_just_titles_page_callpack',
+      'access callback' => 'user_is_logged_in',
+      'type' => MENU_NORMAL_ITEM,
+    );
+    $items['new_movies_ajax_list'] = array(
+      'title' => t('Upcoming movie list with ajax'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('new_movies_ajax_list_form'),
+      'access callback' => 'user_is_logged_in',
+      'type' => MENU_NORMAL_ITEM,
+    );
+    $items['search_movies_ajax'] = array(
+      'title' => t('Search movies'),
+      'page callback' => 'drupal_get_form',
+      'page arguments' => array('search_movies_ajax_form'),
+      'access callback' => 'user_is_logged_in',
+      'type' => MENU_NORMAL_ITEM,
+    );
+    return $items;
+}
+
+/**
+ * Implements hook_cron().
+ * 
+ * Updates last_time_updated_var.
+ * If movies for current release date haven't been crawled, they are saved.
+ */
+function upcoming_movie_list_cron() {
+    if ($release_date = fetch_upcoming_movies_release_date()) {
+
+        // Check if the crawler release date is already stored.
+        if (is_release_date_saved($release_date) == FALSE) {
+            save_upcoming_movie_nodes();
+            update_last_time_updated_var();
+            watchdog('upcoming_movie_list', "New movies added to database");
+        } else {
+            update_last_time_updated_var();
+            watchdog('upcoming_movie_list', "No new movies added, release date has already been checkt!");
+        }
+    }
+}
+
+/**
+ * Page callback for upcoming_movie_list_menu path.
+ */
+function upcoming_movie_list_just_titles_page_callpack() {
+    $fetched_release_date = fetch_upcoming_movies_release_date();
+    // Fetch titles from all "upcoming_movie" nodes for current release date.
+    $node_query = new EntityFieldQuery();
+    $node_query
+        ->entityCondition('entity_type', 'node')
+        ->propertyCondition('type', 'upcoming_movie')
+        ->fieldCondition('field_release_date ', 'value', $fetched_release_date);
+    $result = $node_query->execute();
+    $nodes = node_load_multiple(array_keys($result['node']));
+    $movietitles = [];
+    foreach ($nodes as $node) {
+        $movietitles [] = $node->title;
+        $release_date = $node->field_release_date['und'][0]['value'];
+    }
+
+    $page['upcoming_movie_list_only_titles'] = [
+      '#theme' => 'movie_titles',
+      '#movietitles' => $movietitles,
+      '#time_of_update_markup' => variable_get('last_checked_upcoming_movies'),
+      '#release_date' => format_date($release_date, 'medium', 'd.m.Y'),
+    ];
+    return $page;
+}
+
+/**
+ * Implements hook_theme().
+ */
+function upcoming_movie_list_theme() {
+    return array(
+      'movie_titles' => array(
+        'variables' => array('movietitles' => [], 'time_of_update_markup' => NULL, 'release_date' => NULL),
+        'template' => 'templates/upcoming_movie_list_only_titles',
+      )
+    );
+}
+
+/**
+ * Creates form for new_movies_ajax_list path.
+ */
+function new_movies_ajax_list_form($form, &$form_state) {
+    // Fetch all available release dates already stored.
+    $select = db_select('field_revision_field_release_date', 't')
+        ->fields('t')
+        ->groupBy('t.field_release_date_value');
+    $result_query = $select->execute();
+
+    $release_dates = array();
+    while ($current_result = $result_query->fetchAssoc()) {
+        $release_dates[$current_result['field_release_date_value']] = format_date($current_result['field_release_date_value'], 'medium', 'd.m.Y');
+    }
+
+    $selected = isset($form_state['values']['release_date_options']) ? $form_state['values']['release_date_options'] : "nothing selected";
+    $form['release_date_options'] = array(
+      '#title' => t('Release Date'),
+      '#type' => 'select',
+      '#description' => t('Select the Release Date.'),
+      '#options' => $release_dates,
+      '#default_value' => $selected
+    );
+    $form['submit'] = array(
+      '#type' => 'submit',
+      '#value' => t('Submit'),
+      '#ajax' => array(
+        'callback' => 'new_movies_ajax_list_ajax_callback',
+        'wrapper' => 'list-of-movies',
+      ),
+    );
+    $form['result'] = array(
+      '#markup' => '<div id="list-of-movies"></div>',
+    );
+    return $form;
+}
+
+/**
+ * Ajax callback for new_movies_ajax_list_ajax.
+ * Recreates form with search results for submitted release date.
+ * @param type $form
+ *  The new_movies_ajax_list_ajax form
+ * @param type $form_state
+ *  The submitted value
+ * @return string
+ *  New formelement with results.
+ */
+function new_movies_ajax_list_ajax_callback($form, &$form_state) {
+    $submitted_release_date = $form_state['values'];
+
+    // Fetch titles with matching release date.
+    $node_query = new EntityFieldQuery();
+    $node_query
+        ->entityCondition('entity_type', 'node')
+        ->propertyCondition('type', 'upcoming_movie')
+        ->fieldCondition('field_release_date ', 'value', $submitted_release_date);
+    $result = $node_query->execute();
+    $nodes = node_load_multiple(array_keys($result['node']));
+    
+    $titles = [];
+    foreach ($nodes as $node) {
+        $titles[] = $node->title;
+    }
+    $result = $form_state['values']['release_date_options'];
+    $form['result'] = array(
+      '#type' => 'wrapper',
+      '#markup' => '',
+      '#prefix' => '<div id="list-of-movies">',
+      '#suffix' => '</div>'
+    );
+    foreach ($titles as $title) {
+        $form['result'][$title] = array(
+          '#type' => 'markup',
+          '#markup' => $title . "</br>",
+        );
+    }
+    return $form['result'];
+}
+/**
+ * Implements hook_form_submit
+ */
+function new_movies_ajax_list_form_submit($form, &$form_state) {
+	
+}
+
+/**
+ * Implements hook_form_validate
+ */
+function new_movies_ajax_list_form_validate($form, &$form_state) {
+	
+}
+
+
+/**
+ * Creates form for search_movies_ajax path.
+ */
+function search_movies_ajax_form($form, &$form_state) {
+    $selected = isset($form_state['values']['release_date_options']) ? $form_state['values']['release_date_options'] : "nothing selected";
+    
+    $form['search'] = array(
+      '#title' => t('Search movie:'),
+      '#type' => 'textfield',
+      '#size' => 60,
+      '#maxlength' => 128,
+      '#required' => TRUE,
+    );
+    $form['submit'] = array(
+      '#type' => 'submit',
+      '#value' => t('Submit'),
+      '#ajax' => array(
+        'callback' => 'search_movies_ajax_callback',
+        'wrapper' => 'search-result',
+      ),
+    );
+    $form['result'] = array(
+      '#markup' => '<div id="search-result"></div>',
+    );
+    return $form;
+}
+
+/**
+ * Ajax callback for search_movies_ajax.
+ * Recreates form with search results for submitted string.
+ * @param type $form
+ *  The new_movies_ajax_list_ajax form
+ * @param type $form_state
+ *  The submitted value
+ * @return string
+ *  New formelement with results.
+ */
+function search_movies_ajax_callback($form, &$form_state) {
+    $submitted_string = $form_state['values']['search'];
+    $name_query = db_select('node', 'n');
+    $name_query->fields('n')
+            ->condition('title', '%' . db_like($submitted_string) . '%', 'LIKE');
+    $name_result = $name_query->execute();
+
+    while($fetched_title = $name_result->fetchAssoc()) {
+        $titles[] = $fetched_title;
+    }
+
+    $form['result'] = array(
+      '#type' => 'wrapper',
+      '#markup' => '',
+      '#prefix' => '<div id="search-result">',
+      '#suffix' => '</div>'
+    );
+    foreach ($titles as $title) {
+        $form['result'][$title['title']] = array(
+        '#type' => 'markup',
+        '#markup' => $title['title'].'</br>', 
+        );
+    }
+    return $form['result'];
+}
+
+/**
+ * Implements hook_form_submit
+ */
+function search_movies_ajax_form_submit($form, &$form_state) {
+    
+}
+
+/**
+ * Implements hook_form_validate
+ */
+function search_movies_ajax_form_validate($form, &$form_state) {
+    
+}
